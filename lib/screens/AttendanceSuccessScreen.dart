@@ -3,8 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/attendance_model.dart';
 import 'dashboard_screen.dart';
-import 'dart:math' as math;
-
 
 class AttendanceSuccessScreen extends StatefulWidget {
   final String qrData;
@@ -23,492 +21,371 @@ class AttendanceSuccessScreen extends StatefulWidget {
 }
 
 class _AttendanceSuccessScreenState extends State<AttendanceSuccessScreen>
-    with TickerProviderStateMixin {
-  late AnimationController _celebrationController;
-  late AnimationController _cardController;
-  late Animation<double> _bounceAnimation;
-  late Animation<double> _scaleAnimation;
+    with SingleTickerProviderStateMixin {
+  late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
+  late Animation<double> _scaleAnimation;
+  late Animation<double> _slideAnimation;
 
   @override
   void initState() {
     super.initState();
-    _initializeAnimations();
-    _startCelebration();
+    _initAnimations();
+    _animationController.forward();
   }
 
-  void _initializeAnimations() {
-    _celebrationController = AnimationController(
-      duration: const Duration(milliseconds: 2000),
+  void _initAnimations() {
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 1200),
       vsync: this,
-    );
-
-    _cardController = AnimationController(
-      duration: const Duration(milliseconds: 1500),
-      vsync: this,
-    );
-
-    _bounceAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _celebrationController,
-        curve: const Interval(0.0, 0.6, curve: Curves.elasticOut),
-      ),
-    );
-
-    _scaleAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _cardController,
-        curve: const Interval(0.3, 1.0, curve: Curves.easeOutBack),
-      ),
     );
 
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _cardController,
-        curve: const Interval(0.0, 0.8, curve: Curves.easeInOut),
-      ),
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
     );
-  }
 
-  void _startCelebration() async {
-    _celebrationController.forward();
-    await Future.delayed(const Duration(milliseconds: 300));
-    _cardController.forward();
+    _scaleAnimation = Tween<double>(begin: 0.5, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.elasticOut),
+    );
+
+    _slideAnimation = Tween<double>(begin: 50.0, end: 0.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeOutCubic),
+    );
   }
 
   @override
   void dispose() {
-    _celebrationController.dispose();
-    _cardController.dispose();
+    _animationController.dispose();
     super.dispose();
+  }
+
+  void _navigateToDashboard() {
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (context) => DashboardScreen(
+          newAttendance: widget.attendance,
+        ),
+      ),
+          (route) => false,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0D1421),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFF0D1421), Color(0xFF1A2332)],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
-        ),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              children: [
-                const Spacer(flex: 1),
-
-                // Animated Success Icon with Celebration
-                AnimatedBuilder(
-                  animation: _celebrationController,
-                  builder: (context, child) {
-                    return Transform.scale(
-                      scale: _bounceAnimation.value,
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          // Outer glow effect
-                          Container(
-                            width: 160,
-                            height: 160,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: const Color(0xFF4CAF50).withValues(alpha: 0.4),
-                                  blurRadius: 40,
-                                  spreadRadius: 10,
-                                ),
-                              ],
-                            ),
-                          ),
-                          // Main success circle
-                          Container(
-                            width: 140,
-                            height: 140,
-                            decoration: const BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [Color(0xFF4CAF50), Color(0xFF66BB6A)],
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                              ),
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(
-                              Icons.check,
-                              size: 70,
-                              color: Colors.white,
-                            ),
-                          ),
-                          // Celebration particles
-                          ...List.generate(8, (index) {
-                            final angle = (index * 45.0) * (3.14159 / 180);
-                            return Transform.translate(
-                              offset: Offset(
-                                80 * _bounceAnimation.value * math.cos(angle),
-                                80 * _bounceAnimation.value * math.sin(angle),
-                              ),
-                              child: Container(
-                                width: 8,
-                                height: 8,
-                                decoration: BoxDecoration(
-                                  color: [
-                                    const Color(0xFF4CAF50),
-                                    const Color(0xFF00F5FF),
-                                    const Color(0xFFFFD700),
-                                    const Color(0xFFFF6B6B),
-                                  ][index % 4],
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                            );
-                          }),
-                        ],
+      backgroundColor: const Color(0xFF0F172A),
+      body: SafeArea(
+        child: FadeTransition(
+          opacity: _fadeAnimation,
+          child: Column(
+            children: [
+              // ✅ Minimal Header
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Attendance',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w600,
                       ),
-                    );
-                  },
-                ),
-
-                const SizedBox(height: 32),
-
-                // Success Message with Animation
-                FadeTransition(
-                  opacity: _fadeAnimation,
-                  child: Column(
-                    children: [
-                      const Text(
-                        '🎉 Attendance Marked Successfully!',
-                        style: TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-
-                      const SizedBox(height: 12),
-
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    ),
+                    IconButton(
+                      onPressed: _navigateToDashboard,
+                      icon: Container(
+                        padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF4CAF50), Color(0xFF66BB6A)],
-                          ),
-                          borderRadius: BorderRadius.circular(20),
+                          color: Colors.white.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
                         ),
-                        child: Text(
-                          '✅ Updated on Portal & App',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-
-                      const SizedBox(height: 16),
-
-                      Text(
-                        'Successfully recorded for ${widget.lecture['lectureName'] ?? 'your lecture'}',
-                        style: const TextStyle(
-                          fontSize: 16,
+                        child: const Icon(
+                          Icons.close,
                           color: Colors.white70,
-                          height: 1.5,
+                          size: 18,
                         ),
-                        textAlign: TextAlign.center,
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
+              ),
 
-                const SizedBox(height: 32),
-
-                // Enhanced Information Card
-                ScaleTransition(
-                  scale: _scaleAnimation,
-                  child: FadeTransition(
-                    opacity: _fadeAnimation,
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            const Color(0xFF1E2A3A),
-                            const Color(0xFF1E2A3A).withValues(alpha: 0.9),
-                          ],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: const Color(0xFF4CAF50).withValues(alpha: 0.3),
-                          width: 2,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFF4CAF50).withValues(alpha: 0.1),
-                            blurRadius: 20,
-                            spreadRadius: 5,
-                          ),
-                        ],
-                      ),
+              // ✅ Scrollable Content (Fixes overflow)
+              Expanded(
+                child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  child: Transform.translate(
+                    offset: Offset(0, _slideAnimation.value),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
                       child: Column(
                         children: [
-                          // Header with pulse animation
-                          Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    colors: [Color(0xFF4CAF50), Color(0xFF66BB6A)],
-                                  ),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: const Icon(
-                                  Icons.school,
-                                  color: Colors.white,
-                                  size: 24,
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      widget.lecture['lectureName'] ?? 'Lecture',
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    Text(
-                                      widget.lecture['subject'] ?? 'Subject',
-                                      style: const TextStyle(
-                                        color: Color(0xFF00F5FF),
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
+                          const SizedBox(height: 20),
+
+                          // ✅ Enhanced Success Animation (Smaller)
+                          ScaleTransition(
+                            scale: _scaleAnimation,
+                            child: Container(
+                              width: 100,
+                              height: 100,
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [
+                                    Color(0xFF10B981),
+                                    Color(0xFF059669),
+                                    Color(0xFF047857),
                                   ],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
                                 ),
-                              ),
-                              // Live status indicator
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF4CAF50).withValues(alpha: 0.2),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color: const Color(0xFF4CAF50).withValues(alpha: 0.5),
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: const Color(0xFF10B981).withValues(alpha: 0.4),
+                                    blurRadius: 20,
+                                    spreadRadius: 3,
                                   ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Container(
-                                      width: 8,
-                                      height: 8,
-                                      decoration: const BoxDecoration(
-                                        color: Color(0xFF4CAF50),
-                                        shape: BoxShape.circle,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    const Text(
-                                      'LIVE',
-                                      style: TextStyle(
-                                        color: Color(0xFF4CAF50),
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                                ],
                               ),
-                            ],
+                              child: const Icon(
+                                Icons.check_rounded,
+                                color: Colors.white,
+                                size: 50,
+                              ),
+                            ),
                           ),
 
                           const SizedBox(height: 24),
 
-                          // Details Grid with Icons
-                          _buildDetailRow(
-                            'Teacher',
-                            widget.attendance.teacherName,
-                            Icons.person_outline,
-                            const Color(0xFF00F5FF),
-                          ),
-                          const SizedBox(height: 16),
-                          _buildDetailRow(
-                            'Date & Time',
-                            '${DateFormat('MMM dd, yyyy').format(widget.attendance.markedAt)} • ${DateFormat('hh:mm a').format(widget.attendance.markedAt)}',
-                            Icons.schedule,
-                            const Color(0xFF00F5FF),
-                          ),
-                          const SizedBox(height: 16),
-                          _buildDetailRow(
-                            'Class Section',
-                            '${widget.attendance.lectureClass}-${widget.attendance.section}',
-                            Icons.class_,
-                            const Color(0xFF00F5FF),
-                          ),
-                          const SizedBox(height: 16),
-                          _buildDetailRow(
-                            'Status',
-                            widget.attendance.status.toUpperCase(),
-                            Icons.verified,
-                            const Color(0xFF4CAF50),
+                          // ✅ Success Title (Smaller)
+                          const Text(
+                            'Attendance Marked!',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 26,
+                              fontWeight: FontWeight.bold,
+                              height: 1.2,
+                            ),
+                            textAlign: TextAlign.center,
                           ),
 
-                          const SizedBox(height: 20),
+                          const SizedBox(height: 8),
 
-                          // Success confirmation with animation
+                          // ✅ Success Subtitle (Smaller)
+                          Text(
+                            'Your presence has been recorded successfully',
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.7),
+                              fontSize: 14,
+                              height: 1.4,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+
+                          const SizedBox(height: 32),
+
+                          // ✅ Enhanced Details Card (Compact)
                           Container(
                             width: double.infinity,
-                            padding: const EdgeInsets.all(16),
+                            padding: const EdgeInsets.all(20),
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
                                 colors: [
-                                  const Color(0xFF4CAF50).withValues(alpha: 0.1),
-                                  const Color(0xFF66BB6A).withValues(alpha: 0.1),
+                                  const Color(0xFF1E293B),
+                                  const Color(0xFF1E293B).withValues(alpha: 0.8),
                                 ],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
                               ),
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius: BorderRadius.circular(16),
                               border: Border.all(
-                                color: const Color(0xFF4CAF50).withValues(alpha: 0.3),
+                                color: const Color(0xFF334155).withValues(alpha: 0.6),
+                                width: 1,
                               ),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(
-                                  Icons.cloud_done,
-                                  color: Color(0xFF4CAF50),
-                                  size: 20,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.1),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 4),
                                 ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Text(
-                                    'Your attendance has been recorded and synced with the database. It\'s now visible on both the web portal and mobile app dashboard.',
-                                    style: TextStyle(
-                                      color: const Color(0xFF4CAF50).withValues(alpha: 0.9),
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w500,
+                              ],
+                            ),
+                            child: Column(
+                              children: [
+                                // ✅ Lecture Header (Compact)
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(10),
+                                      decoration: BoxDecoration(
+                                        gradient: const LinearGradient(
+                                          colors: [Color(0xFF3B82F6), Color(0xFF2563EB)],
+                                        ),
+                                        borderRadius: BorderRadius.circular(10),
+                                      ),
+                                      child: const Icon(
+                                        Icons.school_rounded,
+                                        color: Colors.white,
+                                        size: 18,
+                                      ),
                                     ),
-                                  ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            widget.lecture['lectureName'] ?? widget.attendance.lectureName,
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            widget.lecture['subject'] ?? 'Subject',
+                                            style: TextStyle(
+                                              color: const Color(0xFF3B82F6).withValues(alpha: 0.9),
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(
+                                          color: const Color(0xFF10B981).withValues(alpha: 0.3),
+                                        ),
+                                      ),
+                                      child: const Text(
+                                        'PRESENT',
+                                        style: TextStyle(
+                                          color: Color(0xFF10B981),
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w700,
+                                          letterSpacing: 0.5,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+
+                                const SizedBox(height: 20),
+
+                                // ✅ Compact Details Grid
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: _buildDetailItem(
+                                        'Teacher',
+                                        widget.attendance.teacherName,
+                                        Icons.person_rounded,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: _buildDetailItem(
+                                        'Class',
+                                        '${widget.attendance.lectureClass}-${widget.attendance.section}',
+                                        Icons.class_rounded,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+
+                                const SizedBox(height: 12),
+
+                                // ✅ Time Detail (Compact)
+                                _buildDetailItem(
+                                  'Time',
+                                  '${DateFormat('MMM dd').format(widget.attendance.markedAt)} • ${DateFormat('hh:mm a').format(widget.attendance.markedAt)}',
+                                  Icons.access_time_rounded,
+                                  fullWidth: true,
                                 ),
                               ],
                             ),
                           ),
+
+                          const SizedBox(height: 24),
+
+                          // ✅ Compact Quick Stats
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            children: [
+                              _buildQuickStat('Status', 'Present', const Color(0xFF10B981)),
+                              _buildQuickStat('Updated', 'Now', const Color(0xFF3B82F6)),
+                              _buildQuickStat('Method', 'QR', const Color(0xFF8B5CF6)),
+                            ],
+                          ),
+
+                          const SizedBox(height: 100), // ✅ Space for bottom button
                         ],
                       ),
                     ),
                   ),
                 ),
-
-                const Spacer(flex: 2),
-
-                // Enhanced Action Buttons
-                FadeTransition(
-                  opacity: _fadeAnimation,
-                  child: Column(
-                    children: [
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: () {
-                            // Navigate back to dashboard - it will auto-refresh
-                            Navigator.of(context).pushAndRemoveUntil(
-                              MaterialPageRoute(
-                                builder: (context) => const DashboardScreen(),
-                              ),
-                                  (route) => false,
-                            );
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF00F5FF),
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 18),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            elevation: 0,
-                          ),
-                          child: const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.dashboard, size: 22),
-                              SizedBox(width: 10),
-                              Text(
-                                'View Updated Dashboard',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-
-                      const SizedBox(height: 16),
-
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextButton.icon(
-                              onPressed: () {
-                                // Show attendance details
-                                _showAttendanceDetails();
-                              },
-                              icon: const Icon(
-                                Icons.analytics_outlined,
-                                color: Colors.white54,
-                                size: 18,
-                              ),
-                              label: const Text(
-                                'View Details',
-                                style: TextStyle(
-                                  color: Colors.white54,
-                                  fontSize: 14,
-                                ),
-                              ),
-                            ),
-                          ),
-                          Expanded(
-                            child: TextButton.icon(
-                              onPressed: () {
-                                // Share success
-                                _shareSuccess();
-                              },
-                              icon: const Icon(
-                                Icons.share,
-                                color: Colors.white54,
-                                size: 18,
-                              ),
-                              label: const Text(
-                                'Share',
-                                style: TextStyle(
-                                  color: Colors.white54,
-                                  fontSize: 14,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      // ✅ Fixed Bottom Button (Outside scroll view)
+      bottomNavigationBar: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0F172A),
+          border: Border(
+            top: BorderSide(
+              color: const Color(0xFF334155).withValues(alpha: 0.3),
+              width: 0.5,
+            ),
+          ),
+        ),
+        child: SafeArea(
+          child: SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: _navigateToDashboard,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF3B82F6),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
                 ),
-
-                const SizedBox(height: 20),
-              ],
+                elevation: 0,
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Icon(Icons.dashboard_rounded, size: 18),
+                  ),
+                  const SizedBox(width: 10),
+                  const Text(
+                    'View Dashboard',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -516,112 +393,91 @@ class _AttendanceSuccessScreenState extends State<AttendanceSuccessScreen>
     );
   }
 
-  Widget _buildDetailRow(
-      String label,
-      String value,
-      IconData icon,
-      Color iconColor,
-      ) {
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: iconColor.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(
-            icon,
-            size: 18,
-            color: iconColor,
-          ),
+  Widget _buildDetailItem(String label, String value, IconData icon, {bool fullWidth = false}) {
+    return Container(
+      width: fullWidth ? double.infinity : null,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0F172A).withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: const Color(0xFF334155).withValues(alpha: 0.3),
         ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
+              Icon(
+                icon,
+                color: const Color(0xFF64748B),
+                size: 14,
+              ),
+              const SizedBox(width: 6),
               Text(
                 label,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Colors.white54,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.6),
+                  fontSize: 11,
                   fontWeight: FontWeight.w500,
                 ),
               ),
-              const SizedBox(height: 4),
-              Text(
-                value,
-                style: const TextStyle(
-                  fontSize: 15,
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
             ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickStat(String label, String value, Color color) {
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(
+            label == 'Status'
+                ? Icons.check_circle_rounded
+                : label == 'Updated'
+                ? Icons.update_rounded
+                : Icons.qr_code_rounded,
+            color: color,
+            size: 18,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          value,
+          style: TextStyle(
+            color: color,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        Text(
+          label,
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.6),
+            fontSize: 10,
+            fontWeight: FontWeight.w500,
           ),
         ),
       ],
-    );
-  }
-
-  void _showAttendanceDetails() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        decoration: const BoxDecoration(
-          color: Color(0xFF1A2332),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Attendance Details',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 20),
-              Text(
-                'Your attendance for ${widget.lecture['lectureName']} has been successfully recorded and is now visible on:\n\n• Web Portal Dashboard\n• Mobile App Dashboard\n• Teacher\'s Attendance Report\n• Academic Records',
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontSize: 14,
-                  height: 1.5,
-                ),
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () => Navigator.pop(context),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF00F5FF),
-                    foregroundColor: Colors.white,
-                  ),
-                  child: const Text('Got it'),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _shareSuccess() {
-    // You can implement sharing functionality here
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('✅ Attendance marked successfully!'),
-        backgroundColor: Color(0xFF4CAF50),
-      ),
     );
   }
 }

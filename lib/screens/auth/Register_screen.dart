@@ -17,8 +17,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _employeeIdController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
-  final _departmentController = TextEditingController();
-  final _classController = TextEditingController();
+  final _branchController = TextEditingController(); // ✅ User types branch
   final _sectionController = TextEditingController();
 
   String _selectedRole = 'student';
@@ -33,8 +32,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _employeeIdController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
-    _departmentController.dispose();
-    _classController.dispose();
+    _branchController.dispose();
     _sectionController.dispose();
     super.dispose();
   }
@@ -44,15 +42,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     setState(() => _isLoading = true);
 
+    // ✅ Convert Branch and Section to UPPERCASE
+    final branchValue = _branchController.text.trim().toUpperCase();
+    final sectionValue = _sectionController.text.trim().toUpperCase();
+
     final result = await ApiService.register(
       name: _nameController.text.trim(),
       email: _emailController.text.trim(),
       password: _passwordController.text,
       employeeId: _employeeIdController.text.trim(),
       role: _selectedRole,
-      department: _departmentController.text.trim(),
-      userClass: _selectedRole == 'student' ? _classController.text.trim() : null,
-      section: _selectedRole == 'student' ? _sectionController.text.trim() : null,
+      department: branchValue, // ✅ Department = Branch (UPPERCASE)
+      userClass: _selectedRole == 'student' ? branchValue : null, // ✅ Class = Branch (UPPERCASE)
+      section: _selectedRole == 'student' ? sectionValue : null, // ✅ Section (UPPERCASE)
     );
 
     setState(() => _isLoading = false);
@@ -63,8 +65,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
       );
     } else {
       String errorMessage = result['message'];
-
-      // Handle validation errors
       if (result['data'] != null && result['data']['errors'] is List) {
         final errors = result['data']['errors'] as List;
         errorMessage = errors.map((e) => e['message']).join('\n');
@@ -80,6 +80,48 @@ class _RegisterScreenState extends State<RegisterScreen> {
     }
   }
 
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    TextInputType keyboardType = TextInputType.text,
+    bool obscureText = false,
+    Widget? suffixIcon,
+    String? Function(String?)? validator,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E2A3A),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: const Color(0xFF00F5FF).withValues(alpha: 0.3),
+        ),
+      ),
+      child: TextFormField(
+        controller: controller,
+        keyboardType: keyboardType,
+        obscureText: obscureText,
+        validator: validator,
+        style: const TextStyle(color: Colors.white),
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: const TextStyle(color: Color(0xFF00F5FF)),
+          prefixIcon: Icon(icon, color: const Color(0xFF00F5FF)),
+          suffixIcon: suffixIcon,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide.none,
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Color(0xFF00F5FF), width: 2),
+          ),
+          contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -90,7 +132,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         iconTheme: const IconThemeData(color: Colors.white),
         title: const Text(
           'Create Account',
-          style: TextStyle(color: Colors.white),
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
         ),
       ),
       body: Container(
@@ -108,12 +150,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
               key: _formKey,
               child: Column(
                 children: [
-                  // Role Selection
+                  // ✅ Role Selection
                   Container(
                     padding: const EdgeInsets.all(4),
                     decoration: BoxDecoration(
                       color: const Color(0xFF1E2A3A),
                       borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFF00F5FF).withValues(alpha: 0.3)),
                     ),
                     child: Row(
                       children: [
@@ -128,15 +171,27 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                     : Colors.transparent,
                                 borderRadius: BorderRadius.circular(8),
                               ),
-                              child: Text(
-                                'Student',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  color: _selectedRole == 'student'
-                                      ? Colors.white
-                                      : Colors.white70,
-                                  fontWeight: FontWeight.w600,
-                                ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.school,
+                                    size: 18,
+                                    color: _selectedRole == 'student'
+                                        ? Colors.white
+                                        : Colors.white70,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Student',
+                                    style: TextStyle(
+                                      color: _selectedRole == 'student'
+                                          ? Colors.white
+                                          : Colors.white70,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
@@ -152,15 +207,27 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                     : Colors.transparent,
                                 borderRadius: BorderRadius.circular(8),
                               ),
-                              child: Text(
-                                'Teacher',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  color: _selectedRole == 'teacher'
-                                      ? Colors.white
-                                      : Colors.white70,
-                                  fontWeight: FontWeight.w600,
-                                ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.person,
+                                    size: 18,
+                                    color: _selectedRole == 'teacher'
+                                        ? Colors.white
+                                        : Colors.white70,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Teacher',
+                                    style: TextStyle(
+                                      color: _selectedRole == 'teacher'
+                                          ? Colors.white
+                                          : Colors.white70,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
@@ -171,7 +238,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                   const SizedBox(height: 24),
 
-                  // Name Field
+                  // ✅ Full Name Field
                   _buildTextField(
                     controller: _nameController,
                     label: 'Full Name',
@@ -189,7 +256,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                   const SizedBox(height: 20),
 
-                  // Email Field
+                  // ✅ Email Field
                   _buildTextField(
                     controller: _emailController,
                     label: 'Email Address',
@@ -206,72 +273,57 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                   const SizedBox(height: 20),
 
-                  // Employee ID Field
+                  // ✅ Student/Employee ID Field
                   _buildTextField(
                     controller: _employeeIdController,
-                    label: _selectedRole == 'student' ? 'Student ID' : 'Employee ID',
+                    label: _selectedRole == 'student' ? 'Roll Number' : 'Employee ID',
                     icon: Icons.badge_outlined,
                     validator: (value) {
                       if (value?.isEmpty ?? true) return 'ID is required';
                       if (value!.length < 3) return 'ID must be at least 3 characters';
                       if (value.length > 20) return 'ID cannot exceed 20 characters';
-                      if (!RegExp(r'^[a-zA-Z0-9]+$').hasMatch(value)) {
-                        return 'ID can only contain letters and numbers';
-                      }
                       return null;
                     },
                   ),
 
                   const SizedBox(height: 20),
 
-                  // Department Field
+                  // ✅ Branch Field (User Types - No Dropdown)
                   _buildTextField(
-                    controller: _departmentController,
-                    label: 'Department',
-                    icon: Icons.business_outlined,
+                    controller: _branchController,
+                    label: 'Branch',
+                    icon: Icons.school,
                     validator: (value) {
-                      if (value?.isEmpty ?? true) return 'Department is required';
-                      if (value!.length < 2) return 'Department must be at least 2 characters';
-                      if (value.length > 50) return 'Department cannot exceed 50 characters';
+                      if (value?.isEmpty ?? true) return 'Branch is required';
+                      if (value!.length < 2) return 'Branch must be at least 2 characters';
+                      if (value.length > 100) return 'Branch name too long';
                       return null;
                     },
                   ),
 
-                  const SizedBox(height: 20),
-
-                  // Class and Section (for students only)
                   if (_selectedRole == 'student') ...[
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _buildTextField(
-                            controller: _classController,
-                            label: 'Class',
-                            icon: Icons.class_outlined,
-                            validator: (value) {
-                              if (value?.isEmpty ?? true) return 'Class is required';
-                              return null;
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: _buildTextField(
-                            controller: _sectionController,
-                            label: 'Section',
-                            icon: Icons.group_outlined,
-                            validator: (value) {
-                              if (value?.isEmpty ?? true) return 'Section is required';
-                              return null;
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
                     const SizedBox(height: 20),
+
+                    // ✅ Section Field (Only for Students)
+                    _buildTextField(
+                      controller: _sectionController,
+                      label: 'Section',
+                      icon: Icons.group_outlined,
+                      validator: (value) {
+                        if (_selectedRole == 'student' && (value?.isEmpty ?? true)) {
+                          return 'Section is required for students';
+                        }
+                        if (value != null && value.isNotEmpty) {
+                          if (value.length > 10) return 'Section name too long';
+                        }
+                        return null;
+                      },
+                    ),
                   ],
 
-                  // Password Field
+                  const SizedBox(height: 20),
+
+                  // ✅ Password Field
                   _buildTextField(
                     controller: _passwordController,
                     label: 'Password',
@@ -279,26 +331,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     obscureText: _obscurePassword,
                     suffixIcon: IconButton(
                       icon: Icon(
-                        _obscurePassword ? Icons.visibility_off : Icons.visibility,
-                        color: Colors.white70,
+                        _obscurePassword ? Icons.visibility : Icons.visibility_off,
+                        color: const Color(0xFF00F5FF),
                       ),
-                      onPressed: () {
-                        setState(() => _obscurePassword = !_obscurePassword);
-                      },
+                      onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                     ),
                     validator: (value) {
                       if (value?.isEmpty ?? true) return 'Password is required';
-                      if (value!.length < 6) return 'Password must be at least 6 characters long';
-                      if (!RegExp(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)').hasMatch(value)) {
-                        return 'Password must contain at least one uppercase letter, one lowercase letter, and one number';
-                      }
+                      if (value!.length < 6) return 'Password must be at least 6 characters';
                       return null;
                     },
                   ),
 
                   const SizedBox(height: 20),
 
-                  // Confirm Password Field
+                  // ✅ Confirm Password Field
                   _buildTextField(
                     controller: _confirmPasswordController,
                     label: 'Confirm Password',
@@ -306,25 +353,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     obscureText: _obscureConfirmPassword,
                     suffixIcon: IconButton(
                       icon: Icon(
-                        _obscureConfirmPassword ? Icons.visibility_off : Icons.visibility,
-                        color: Colors.white70,
+                        _obscureConfirmPassword ? Icons.visibility : Icons.visibility_off,
+                        color: const Color(0xFF00F5FF),
                       ),
-                      onPressed: () {
-                        setState(() => _obscureConfirmPassword = !_obscureConfirmPassword);
-                      },
+                      onPressed: () => setState(() => _obscureConfirmPassword = !_obscureConfirmPassword),
                     ),
                     validator: (value) {
                       if (value?.isEmpty ?? true) return 'Please confirm your password';
-                      if (value != _passwordController.text) {
-                        return 'Passwords do not match';
-                      }
+                      if (value != _passwordController.text) return 'Passwords do not match';
                       return null;
                     },
                   ),
 
                   const SizedBox(height: 32),
 
-                  // Register Button
+                  // ✅ Register Button
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
@@ -339,70 +382,71 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         elevation: 0,
                       ),
                       child: _isLoading
-                          ? const SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                        ),
+                          ? const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              strokeWidth: 2,
+                            ),
+                          ),
+                          SizedBox(width: 12),
+                          Text(
+                            'Creating Account...',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
                       )
-                          : Text(
-                        'Create ${_selectedRole == 'student' ? 'Student' : 'Teacher'} Account',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
+                          : const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.person_add, size: 20),
+                          SizedBox(width: 8),
+                          Text(
+                            'Create Account',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
 
                   const SizedBox(height: 24),
+
+                  // ✅ Login Link
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: RichText(
+                      text: const TextSpan(
+                        text: 'Already have an account? ',
+                        style: TextStyle(color: Colors.white70),
+                        children: [
+                          TextSpan(
+                            text: 'Login',
+                            style: TextStyle(
+                              color: Color(0xFF00F5FF),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildTextField({
-    required TextEditingController controller,
-    required String label,
-    required IconData icon,
-    TextInputType? keyboardType,
-    bool obscureText = false,
-    Widget? suffixIcon,
-    String? Function(String?)? validator,
-  }) {
-    return TextFormField(
-      controller: controller,
-      keyboardType: keyboardType,
-      obscureText: obscureText,
-      style: const TextStyle(color: Colors.white),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: const TextStyle(color: Colors.white70),
-        prefixIcon: Icon(icon, color: const Color(0xFF00F5FF)),
-        suffixIcon: suffixIcon,
-        filled: true,
-        fillColor: const Color(0xFF1E2A3A),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFF00F5FF), width: 2),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Colors.red),
-        ),
-        errorStyle: const TextStyle(color: Colors.red),
-      ),
-      validator: validator,
     );
   }
 }

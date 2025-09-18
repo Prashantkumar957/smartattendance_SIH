@@ -12,6 +12,15 @@ class ApiService {
   static const String _tokenKey = 'auth_token';
   static const String _userKey = 'user_data';
 
+  // 🆕 Add these helper methods at the top
+  static String jsonEncode(Object? object) {
+    return json.encode(object);
+  }
+
+  static dynamic jsonDecode(String source) {
+    return json.decode(source);
+  }
+
   // Get stored token
   static Future<String?> getToken() async {
     try {
@@ -28,7 +37,7 @@ class ApiService {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_tokenKey, token);
-      await prefs.setString(_userKey, jsonEncode(user.toJson()));
+      await prefs.setString(_userKey, json.encode(user.toJson())); // Use json.encode directly
       print('✅ User data saved successfully');
     } catch (e) {
       print('❌ Error saving user data: $e');
@@ -46,7 +55,7 @@ class ApiService {
         return null;
       }
 
-      final Map<String, dynamic> userMap = jsonDecode(userData);
+      final Map<String, dynamic> userMap = json.decode(userData); // Use json.decode directly
       final user = User.fromJson(userMap);
       print('✅ Retrieved user: ${user.name} (${user.userClass}-${user.section})');
       return user;
@@ -80,7 +89,7 @@ class ApiService {
         };
       }
 
-      final dynamic parsedData = jsonDecode(responseBody);
+      final dynamic parsedData = json.decode(responseBody); // Use json.decode directly
 
       // Ensure we have a proper Map structure
       Map<String, dynamic> data;
@@ -163,7 +172,7 @@ class ApiService {
       final response = await http.post(
         Uri.parse('$baseUrl/api/auth/register'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode(body),
+        body: json.encode(body), // Use json.encode directly
       );
 
       final result = handleResponse(response);
@@ -203,7 +212,7 @@ class ApiService {
       final response = await http.post(
         Uri.parse('$baseUrl/api/auth/login'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
+        body: json.encode({ // Use json.encode directly
           'email': email,
           'password': password,
         }),
@@ -341,7 +350,7 @@ class ApiService {
 
       // Parse QR data for debugging
       try {
-        final qrInfo = jsonDecode(qrData);
+        final qrInfo = json.decode(qrData); // Use json.decode directly
         print('📱 QR Code Info:');
         print('   - Session ID: ${qrInfo['sessionId']}');
         print('   - Lecture ID: ${qrInfo['lectureId']}');
@@ -360,7 +369,7 @@ class ApiService {
       final response = await http.post(
         Uri.parse('$baseUrl/api/attendance/mark'),
         headers: headers,
-        body: jsonEncode({
+        body: json.encode({ // Use json.encode directly
           'qrData': qrData,
         }),
       );
@@ -430,7 +439,7 @@ class ApiService {
 
       if (response.statusCode == 200) {
         try {
-          final jsonResponse = jsonDecode(response.body);
+          final jsonResponse = json.decode(response.body); // Use json.decode directly
           print('📊 JSON Response: $jsonResponse');
 
           // Create default empty response

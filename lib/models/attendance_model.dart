@@ -56,4 +56,27 @@ class Attendance {
       qrSessionId: json['qrSessionId'] ?? '',
     );
   }
+
+  // 🆕 Add the missing toJson method
+  Map<String, dynamic> toJson() {
+    return {
+      '_id': id,
+      'id': id,
+      'studentId': studentId,
+      'studentName': studentName,
+      'studentEmployeeId': studentEmployeeId,
+      'lectureId': lectureId,
+      'lectureName': lectureName,
+      'class': lectureClass,
+      'section': section,
+      'teacherId': teacherId,
+      'teacherName': teacherName,
+      'status': status,
+      'markedAt': markedAt.toIso8601String(),
+      'markedBy': markedBy,
+      'ipAddress': ipAddress,
+      'userAgent': userAgent,
+      'qrSessionId': qrSessionId,
+    };
+  }
 }

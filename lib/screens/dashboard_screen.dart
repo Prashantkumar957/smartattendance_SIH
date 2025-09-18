@@ -4,13 +4,19 @@ import 'package:intl/intl.dart';
 import '../services/api_service.dart';
 import '../models/user_model.dart';
 import '../models/attendance_model.dart';
-import 'DebugUserScreen.dart';
 import 'LecturesScreen.dart';
+import 'ProfileScreen.dart';
 import 'face_verification_screen.dart';
 import 'auth/login_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key});
+  final Attendance? newAttendance; // ✅ Add parameter to receive attendance
+
+  const DashboardScreen({
+    super.key,
+    this.newAttendance, // ✅ Optional parameter
+  });
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -19,7 +25,9 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen>
     with TickerProviderStateMixin, WidgetsBindingObserver {
   late AnimationController _fadeAnimationController;
+  late AnimationController _pulseController;
   late Animation<double> _fadeAnimation;
+  late Animation<double> _pulseAnimation;
 
   User? _currentUser;
   List<Attendance> _recentAttendance = [];
@@ -32,17 +40,229 @@ class _DashboardScreenState extends State<DashboardScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _initializeAnimations();
-    _loadData();
+
+    // ✅ Check if attendance data was passed from success screen
+    if (widget.newAttendance != null) {
+      _handleNewAttendanceFromSuccess();
+    } else {
+      _loadData();
+    }
+  }
+
+  // ✅ Handle new attendance passed from success screen
+  Future<void> _handleNewAttendanceFromSuccess() async {
+    setState(() => _isLoading = true);
+
+    try {
+      final isLoggedIn = await ApiService.isLoggedIn();
+      if (!isLoggedIn) {
+        _navigateToLogin();
+        return;
+      }
+
+      _currentUser = await ApiService.getStoredUser();
+      if (_currentUser == null) {
+        _navigateToLogin();
+        return;
+      }
+
+      print('🎯 Processing new attendance from success screen...');
+
+      // Load existing data first
+      await _loadAttendanceData();
+
+      // Process the new attendance with increment
+      await _processNewAttendanceWithIncrement(widget.newAttendance!);
+
+    } catch (e) {
+      print('❌ Error handling new attendance: $e');
+      _showError('Failed to process attendance: $e');
+      await _loadData();
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  // ✅ Process new attendance and increment values
+  Future<void> _processNewAttendanceWithIncrement(Attendance attendance) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      List<String> storedAttendance = prefs.getStringList('manual_attendance') ?? [];
+
+      // Check if this attendance already exists to prevent duplicates
+      final alreadyExists = _recentAttendance.any((existing) =>
+      existing.markedAt.millisecondsSinceEpoch == attendance.markedAt.millisecondsSinceEpoch &&
+          existing.lectureName == attendance.lectureName);
+
+      if (!alreadyExists) {
+        // Add new attendance to local storage
+        storedAttendance.insert(0, ApiService.jsonEncode(attendance.toJson()));
+
+        // Keep only last 20 records
+        if (storedAttendance.length > 20) {
+          storedAttendance = storedAttendance.take(20).toList();
+        }
+
+        await prefs.setStringList('manual_attendance', storedAttendance);
+        print('✅ New attendance saved to local storage');
+
+        // ✅ IMMEDIATE UI UPDATE WITH +1 INCREMENT
+        setState(() {
+          // Add to recent activity at the top
+          _recentAttendance.insert(0, attendance);
+
+          // ✅ INCREMENT VALUES BY 1
+          _attendanceStats['totalClasses'] = (_attendanceStats['totalClasses'] ?? 0) + 1;
+          _attendanceStats['presentClasses'] = (_attendanceStats['presentClasses'] ?? 0) + 1;
+
+          // Recalculate percentage
+          int total = _attendanceStats['totalClasses'];
+          int present = _attendanceStats['presentClasses'];
+          _attendanceStats['attendancePercentage'] = total > 0 ? ((present / total) * 100).round() : 0;
+
+          _hasMarkedToday = true;
+        });
+
+        // ✅ SAVE PRESENT VALUE TO SHARED PREFERENCES
+        await _savePresentValueLocally(_attendanceStats['presentClasses']);
+
+        // ✅ Show "Attendance Updated" notification
+        _showAttendanceUpdatedNotification(attendance);
+
+        print('✅ Dashboard values incremented and saved:');
+        print(' Present: +1 → ${_attendanceStats['presentClasses']}');
+        print(' Total: +1 → ${_attendanceStats['totalClasses']}');
+        print(' Percentage: ${_attendanceStats['attendancePercentage']}%');
+      }
+    } catch (e) {
+      print('❌ Error processing new attendance: $e');
+    }
+  }
+
+  // ✅ Save Present value to SharedPreferences
+  Future<void> _savePresentValueLocally(int presentCount) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt('attendance_present_count', presentCount);
+      await prefs.setInt('attendance_total_count', _attendanceStats['totalClasses']);
+      await prefs.setInt('attendance_percentage', _attendanceStats['attendancePercentage']);
+      print('✅ Present value saved locally: $presentCount');
+    } catch (e) {
+      print('❌ Error saving present value: $e');
+    }
+  }
+
+  // ✅ Load Present value from SharedPreferences
+  Future<Map<String, int>> _loadSavedAttendanceValues() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final presentCount = prefs.getInt('attendance_present_count') ?? 0;
+      final totalCount = prefs.getInt('attendance_total_count') ?? 0;
+      final percentage = prefs.getInt('attendance_percentage') ?? 0;
+
+      print('✅ Loaded saved attendance values:');
+      print(' Present: $presentCount');
+      print(' Total: $totalCount');
+      print(' Percentage: $percentage%');
+
+      return {
+        'presentClasses': presentCount,
+        'totalClasses': totalCount,
+        'attendancePercentage': percentage,
+      };
+    } catch (e) {
+      print('❌ Error loading saved values: $e');
+      return {
+        'presentClasses': 0,
+        'totalClasses': 0,
+        'attendancePercentage': 0,
+      };
+    }
+  }
+
+  // ✅ Show "Attendance Updated" notification
+  void _showAttendanceUpdatedNotification(Attendance attendance) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Container(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF10B981), Color(0xFF065F46)],
+                  ),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.trending_up,
+                  color: Colors.white,
+                  size: 18,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      '🎉 Dashboard Updated!',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Present +1 • ${attendance.lectureName}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.white70,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF10B981).withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text(
+                  '+1',
+                  style: TextStyle(
+                    color: Color(0xFF10B981),
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        backgroundColor: const Color(0xFF1E293B),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 4),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
+        elevation: 8,
+      ),
+    );
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _fadeAnimationController.dispose();
+    _pulseController.dispose();
     super.dispose();
   }
 
-  // This automatically refreshes when app comes back from QR screen
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
@@ -53,27 +273,37 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   void _initializeAnimations() {
     _fadeAnimationController = AnimationController(
-      duration: const Duration(milliseconds: 1000),
+      duration: const Duration(milliseconds: 800),
       vsync: this,
     );
+
+    _pulseController = AnimationController(
+      duration: const Duration(milliseconds: 2000),
+      vsync: this,
+    );
+
     _fadeAnimation = Tween(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _fadeAnimationController, curve: Curves.easeInOut),
     );
+
+    _pulseAnimation = Tween(begin: 1.0, end: 1.05).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
+
     _fadeAnimationController.forward();
+    _pulseController.repeat(reverse: true);
   }
 
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
 
     try {
-      // Check if user is logged in
       final isLoggedIn = await ApiService.isLoggedIn();
       if (!isLoggedIn) {
         _navigateToLogin();
         return;
       }
 
-      // Get current user
       _currentUser = await ApiService.getStoredUser();
       if (_currentUser == null) {
         _navigateToLogin();
@@ -81,8 +311,6 @@ class _DashboardScreenState extends State<DashboardScreen>
       }
 
       print('📊 Loading attendance data for: ${_currentUser!.name}');
-
-      // Load attendance data
       await _loadAttendanceData();
     } catch (e) {
       print('❌ Error loading data: $e');
@@ -96,24 +324,32 @@ class _DashboardScreenState extends State<DashboardScreen>
     try {
       print('📊 Loading attendance data...');
 
-      final result = await ApiService.getStudentAttendance(limit: 10);
+      // ✅ FIRST LOAD SAVED VALUES FROM LOCAL STORAGE
+      final savedValues = await _loadSavedAttendanceValues();
 
-      print('📊 Attendance result success: ${result['success']}');
-      print('📊 Attendance result keys: ${result.keys}');
+      // Get API data
+      final result = await ApiService.getStudentAttendance(limit: 10);
+      print('📊 API Result: ${result['success']} - ${result['attendance']?.length ?? 0} records');
+
+      // Get local manual attendance data
+      final localData = await _getLocalAttendanceData();
 
       if (result['success'] == true) {
         setState(() {
-          // Handle attendance list
           final attendanceData = result['attendance'];
           if (attendanceData is List) {
             _recentAttendance = attendanceData.cast<Attendance>();
           } else {
-            _recentAttendance = <Attendance>[];
+            _recentAttendance = [];
           }
 
-          // Handle statistics
+          // Add local manual attendance
+          _recentAttendance.addAll(localData['manualAttendance']);
+          _recentAttendance.sort((a, b) => b.markedAt.compareTo(a.markedAt));
+
+          // ✅ USE SAVED VALUES OR API VALUES (WHICHEVER IS HIGHER)
           final statsData = result['statistics'];
-          if (statsData is Map<String, dynamic>) {
+          if (statsData is Map) {
             _attendanceStats = Map<String, dynamic>.from(statsData);
           } else {
             _attendanceStats = {
@@ -124,51 +360,187 @@ class _DashboardScreenState extends State<DashboardScreen>
             };
           }
 
+          // Add manual attendance count
+          final manualCount = localData['count'] as int;
+          _attendanceStats['totalClasses'] = (_attendanceStats['totalClasses'] ?? 0) + manualCount;
+          _attendanceStats['presentClasses'] = (_attendanceStats['presentClasses'] ?? 0) + manualCount;
+
+          // ✅ USE SAVED VALUES IF THEY'RE HIGHER (MEANS USER MARKED ATTENDANCE OFFLINE)
+          if (savedValues['presentClasses']! > _attendanceStats['presentClasses']) {
+            _attendanceStats['presentClasses'] = savedValues['presentClasses'];
+            _attendanceStats['totalClasses'] = savedValues['totalClasses'];
+          }
+
+          // Recalculate percentage
+          int total = _attendanceStats['totalClasses'];
+          int present = _attendanceStats['presentClasses'];
+          _attendanceStats['attendancePercentage'] = total > 0 ? ((present / total) * 100).round() : 0;
+
           _hasMarkedToday = _checkIfMarkedToday();
         });
 
         print('✅ Dashboard updated successfully:');
-        print('   Total Classes: ${_attendanceStats['totalClasses']}');
-        print('   Present: ${_attendanceStats['presentClasses']}');
-        print('   Percentage: ${_attendanceStats['attendancePercentage']}%');
-        print('   Recent Entries: ${_recentAttendance.length}');
-        print('   Marked Today: $_hasMarkedToday');
+        print(' Total Classes: ${_attendanceStats['totalClasses']}');
+        print(' Present: ${_attendanceStats['presentClasses']}');
+        print(' Percentage: ${_attendanceStats['attendancePercentage']}%');
+        print(' Recent Entries: ${_recentAttendance.length}');
+        print(' Marked Today: $_hasMarkedToday');
       } else {
-        print('❌ API returned success=false: ${result['message']}');
-
-        // Set empty data but don't show error since we're handling it gracefully
+        // ✅ SHOW SAVED VALUES EVEN IF API FAILS
         setState(() {
-          _recentAttendance = <Attendance>[];
+          _recentAttendance = localData['manualAttendance'];
           _attendanceStats = {
-            'totalClasses': 0,
-            'presentClasses': 0,
-            'attendancePercentage': 0,
+            'totalClasses': savedValues['totalClasses']!,
+            'presentClasses': savedValues['presentClasses']!,
+            'attendancePercentage': savedValues['attendancePercentage']!,
             'absentClasses': 0,
           };
-          _hasMarkedToday = false;
+          _hasMarkedToday = _checkIfMarkedToday();
         });
       }
     } catch (e) {
       print('💥 Error in _loadAttendanceData: $e');
-      print('💥 Error type: ${e.runtimeType}');
 
-      // Set empty data on any exception
+      // ✅ FALLBACK TO SAVED VALUES
+      final savedValues = await _loadSavedAttendanceValues();
+      final localData = await _getLocalAttendanceData();
       setState(() {
-        _recentAttendance = <Attendance>[];
+        _recentAttendance = localData['manualAttendance'];
         _attendanceStats = {
-          'totalClasses': 0,
-          'presentClasses': 0,
-          'attendancePercentage': 0,
+          'totalClasses': savedValues['totalClasses']!,
+          'presentClasses': savedValues['presentClasses']!,
+          'attendancePercentage': savedValues['attendancePercentage']!,
           'absentClasses': 0,
         };
         _hasMarkedToday = false;
       });
-
-      // Only show error for actual network issues, not data parsing
-      if (e.toString().contains('Network') || e.toString().contains('Socket')) {
-        _showError('Unable to load attendance data. Please check your connection.');
-      }
     }
+  }
+
+  // Enhanced local attendance storage
+  Future<Map<String, dynamic>> _getLocalAttendanceData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      List<String> storedAttendance = prefs.getStringList('manual_attendance') ?? [];
+
+      List<Attendance> manualAttendance = [];
+      for (String attendanceJson in storedAttendance) {
+        try {
+          final Map<String, dynamic> data = Map<String, dynamic>.from(
+              Map.from(ApiService.jsonDecode(attendanceJson))
+          );
+          manualAttendance.add(Attendance.fromJson(data));
+        } catch (e) {
+          print('Error parsing manual attendance: $e');
+        }
+      }
+
+      return {
+        'manualAttendance': manualAttendance,
+        'count': manualAttendance.length,
+      };
+    } catch (e) {
+      print('Error getting local attendance data: $e');
+      return {
+        'manualAttendance': <Attendance>[],
+        'count': 0,
+      };
+    }
+  }
+
+  // Enhanced manual attendance with immediate increment
+  Future<void> addManualAttendance(Attendance attendance) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      List<String> storedAttendance = prefs.getStringList('manual_attendance') ?? [];
+
+      // Add new attendance to beginning
+      storedAttendance.insert(0, ApiService.jsonEncode(attendance.toJson()));
+
+      // Keep only last 20 records
+      if (storedAttendance.length > 20) {
+        storedAttendance = storedAttendance.take(20).toList();
+      }
+
+      await prefs.setStringList('manual_attendance', storedAttendance);
+      print('✅ Manual attendance saved locally');
+
+      // 🎯 Immediate UI update without API call
+      setState(() {
+        // Add to recent activity
+        _recentAttendance.insert(0, attendance);
+
+        // Update stats immediately
+        _attendanceStats['totalClasses'] = (_attendanceStats['totalClasses'] ?? 0) + 1;
+        _attendanceStats['presentClasses'] = (_attendanceStats['presentClasses'] ?? 0) + 1;
+
+        // Recalculate percentage
+        int total = _attendanceStats['totalClasses'];
+        int present = _attendanceStats['presentClasses'];
+        _attendanceStats['attendancePercentage'] = total > 0 ? ((present / total) * 100).round() : 0;
+
+        _hasMarkedToday = true;
+      });
+
+      // ✅ SAVE UPDATED VALUES LOCALLY
+      await _savePresentValueLocally(_attendanceStats['presentClasses']);
+
+      // Show success announcement
+      _showAttendanceMarkedAnnouncement(attendance);
+    } catch (e) {
+      print('❌ Error saving manual attendance: $e');
+    }
+  }
+
+  void _showAttendanceMarkedAnnouncement(Attendance attendance) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Container(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.green.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Icon(
+                  Icons.check_circle,
+                  color: Colors.green,
+                  size: 18,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      '🎉 Attendance Marked Successfully!',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                    ),
+                    Text(
+                      '${attendance.lectureName} • ${attendance.teacherName}',
+                      style: const TextStyle(fontSize: 12, color: Colors.white70),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        backgroundColor: const Color(0xFF1E293B),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 4),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
+      ),
+    );
   }
 
   bool _checkIfMarkedToday() {
@@ -185,35 +557,60 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.red),
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+        behavior: SnackBarBehavior.floating,
+      ),
     );
   }
 
   Future<void> _logout() async {
     await ApiService.logout();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('manual_attendance');
+    // ✅ Clear saved attendance values on logout
+    await prefs.remove('attendance_present_count');
+    await prefs.remove('attendance_total_count');
+    await prefs.remove('attendance_percentage');
     _navigateToLogin();
-  }
-
-  // Method to refresh dashboard when returning from QR scanner
-  void _refreshAfterAttendance() {
-    print('🔄 Refreshing dashboard after attendance marking');
-    _loadData();
   }
 
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Scaffold(
-        backgroundColor: Color(0xFF0D1421),
+      return Scaffold(
+        backgroundColor: const Color(0xFF0F172A),
         body: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              CircularProgressIndicator(color: Color(0xFF00F5FF)),
-              SizedBox(height: 16),
-              Text(
-                'Loading your attendance data...',
-                style: TextStyle(color: Colors.white70),
+              ScaleTransition(
+                scale: _pulseAnimation,
+                child: Container(
+                  width: 60,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF3B82F6), Color(0xFF1D4ED8)],
+                    ),
+                    borderRadius: BorderRadius.circular(30),
+                  ),
+                  child: const Icon(
+                    Icons.school,
+                    color: Colors.white,
+                    size: 30,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              const Text(
+                'Loading your dashboard...',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ],
           ),
@@ -222,35 +619,29 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0D1421),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFF0D1421), Color(0xFF1A2332)],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ),
-        ),
-        child: SafeArea(
-          child: FadeTransition(
-            opacity: _fadeAnimation,
-            child: RefreshIndicator(
-              onRefresh: _loadData,
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(20),
+      backgroundColor: const Color(0xFF0F172A),
+      body: SafeArea(
+        child: FadeTransition(
+          opacity: _fadeAnimation,
+          child: RefreshIndicator(
+            onRefresh: _loadData,
+            color: const Color(0xFF3B82F6),
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildHeader(),
-                    const SizedBox(height: 30),
-                    _buildAttendanceOverview(),
-                    const SizedBox(height: 30),
-                    _buildMarkAttendanceCard(),
-                    const SizedBox(height: 30),
-                    _buildQuickStats(),
-                    const SizedBox(height: 30),
-                    _buildRecentActivity(),
+                    _buildEnhancedHeader(),
+                    const SizedBox(height: 24),
+                    _buildEnhancedAttendanceCard(),
+                    const SizedBox(height: 20),
+                    _buildQuickActions(),
+                    const SizedBox(height: 20),
+                    _buildStatsGrid(),
+                    const SizedBox(height: 20),
+                    _buildEnhancedRecentActivity(),
                   ],
                 ),
               ),
@@ -261,134 +652,197 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  // Update just the _buildHeader method in dashboard_screen.dart
-  Widget _buildHeader() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              _getGreeting(),
-              style: const TextStyle(
-                color: Colors.white70,
-                fontSize: 16,
-                fontWeight: FontWeight.w400,
+  Widget _buildEnhancedHeader() {
+    final greeting = _getGreeting();
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            const Color(0xFF1E293B),
+            const Color(0xFF1E293B).withValues(alpha: 0.8),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: const Color(0xFF334155).withValues(alpha: 0.5),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.1),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          // Enhanced Profile Avatar
+          Container(
+            padding: const EdgeInsets.all(3),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF3B82F6), Color(0xFF1D4ED8)],
+              ),
+              borderRadius: BorderRadius.circular(25),
+            ),
+            child: CircleAvatar(
+              radius: 22,
+              backgroundColor: const Color(0xFF0F172A),
+              child: Text(
+                _currentUser?.name.substring(0, 1).toUpperCase() ?? 'S',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
-            PopupMenuButton(
-              icon: const Icon(Icons.more_vert, color: Colors.white70),
-              color: const Color(0xFF1E2A3A),
-              itemBuilder: (context) => [
-                const PopupMenuItem(
-                  value: 'refresh',
-                  child: Row(
-                    children: [
-                      Icon(Icons.refresh, color: Colors.white, size: 20),
-                      SizedBox(width: 8),
-                      Text('Refresh Data', style: TextStyle(color: Colors.white)),
-                    ],
+          ),
+          const SizedBox(width: 16),
+          // User Info
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  greeting,
+                  style: const TextStyle(
+                    color: Colors.white60,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w400,
                   ),
                 ),
-                const PopupMenuItem(
-                  value: 'debug_api',
-                  child: Row(
-                    children: [
-                      Icon(Icons.bug_report, color: Colors.orange, size: 20),
-                      SizedBox(width: 8),
-                      Text('Test API', style: TextStyle(color: Colors.white)),
-                    ],
+                const SizedBox(height: 2),
+                Text(
+                  _currentUser?.name ?? 'Student',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
-                const PopupMenuItem(
-                  value: 'debug',
-                  child: Row(
-                    children: [
-                      Icon(Icons.info, color: Colors.white, size: 20),
-                      SizedBox(width: 8),
-                      Text('Debug Info', style: TextStyle(color: Colors.white)),
-                    ],
-                  ),
-                ),
-                const PopupMenuItem(
-                  value: 'logout',
-                  child: Row(
-                    children: [
-                      Icon(Icons.logout, color: Colors.white, size: 20),
-                      SizedBox(width: 8),
-                      Text('Logout', style: TextStyle(color: Colors.white)),
-                    ],
-                  ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF3B82F6).withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: const Color(0xFF3B82F6).withValues(alpha: 0.3),
+                        ),
+                      ),
+                      child: Text(
+                        '${_currentUser?.userClass ?? ''}-${_currentUser?.section ?? ''}',
+                        style: const TextStyle(
+                          color: Color(0xFF3B82F6),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '• ${_currentUser?.employeeId ?? ''}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
                 ),
               ],
-              onSelected: (value) {
-                if (value == 'logout') _logout();
-                if (value == 'debug') {
+            ),
+          ),
+          // Enhanced Menu
+          PopupMenuButton<String>(
+            icon: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF334155).withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.more_vert, color: Colors.white70, size: 20),
+            ),
+            color: const Color(0xFF1E293B),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'profile',
+                child: Row(
+                  children: [
+                    Icon(Icons.person, color: Color(0xFF3B82F6), size: 18),
+                    SizedBox(width: 12),
+                    Text('Profile', style: TextStyle(color: Colors.white, fontSize: 14)),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'refresh',
+                child: Row(
+                  children: [
+                    Icon(Icons.refresh, color: Color(0xFF10B981), size: 18),
+                    SizedBox(width: 12),
+                    Text('Refresh', style: TextStyle(color: Colors.white, fontSize: 14)),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'logout',
+                child: Row(
+                  children: [
+                    Icon(Icons.logout, color: Colors.red, size: 18),
+                    SizedBox(width: 12),
+                    Text('Logout', style: TextStyle(color: Colors.white, fontSize: 14)),
+                  ],
+                ),
+              ),
+            ],
+            onSelected: (value) {
+              switch (value) {
+                case 'profile':
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (context) => const DebugUserScreen()),
+                    MaterialPageRoute(builder: (context) => ProfileScreen(user: _currentUser!)),
                   );
-                }
-                if (value == 'refresh') _loadData();
-                if (value == 'debug_api') {
-                  ApiService.debugAttendanceAPI();
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Check console for API test results'),
-                      backgroundColor: Colors.orange,
-                    ),
-                  );
-                }
-              },
-            ),
-          ],
-        ),
-        // ... rest of header remains the same
-        Text(
-          'Welcome, ${_currentUser?.name ?? 'Student'}!',
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 32,
-            fontWeight: FontWeight.bold,
+                  break;
+                case 'refresh':
+                  _loadData();
+                  break;
+                case 'logout':
+                  _logout();
+                  break;
+              }
+            },
           ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          '${_currentUser?.employeeId ?? ''} • ${_currentUser?.userClass ?? ''}-${_currentUser?.section ?? ''}',
-          style: const TextStyle(
-            color: Colors.white54,
-            fontSize: 14,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          DateFormat('EEEE, MMMM dd, yyyy').format(DateTime.now()),
-          style: const TextStyle(
-            color: Colors.white54,
-            fontSize: 16,
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
-
-  Widget _buildAttendanceOverview() {
+  Widget _buildEnhancedAttendanceCard() {
     final percentage = _attendanceStats['attendancePercentage']?.toDouble() ?? 0.0;
 
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF00F5FF), Color(0xFF0099CC)],
+        gradient: LinearGradient(
+          colors: [
+            const Color(0xFF3B82F6),
+            const Color(0xFF1D4ED8),
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF00F5FF).withValues(alpha: 0.3),
+            color: const Color(0xFF3B82F6).withValues(alpha: 0.4),
             blurRadius: 20,
             offset: const Offset(0, 8),
           ),
@@ -397,35 +851,73 @@ class _DashboardScreenState extends State<DashboardScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Header with live indicator
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'Attendance Overview',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  'Live Data',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
+              const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Attendance Overview',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                ),
+                  Text(
+                    'Real-time tracking',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+              AnimatedBuilder(
+                animation: _pulseController,
+                builder: (context, child) {
+                  return Transform.scale(
+                    scale: _pulseAnimation.value,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: const BoxDecoration(
+                              color: Colors.green,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          const Text(
+                            'LIVE',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
               ),
             ],
           ),
-          const SizedBox(height: 20),
+
+          const SizedBox(height: 24),
+
+          // Main stats
           Row(
             children: [
               Expanded(
@@ -436,10 +928,12 @@ class _DashboardScreenState extends State<DashboardScreen>
                       '${percentage.toStringAsFixed(1)}%',
                       style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 48,
+                        fontSize: 40,
                         fontWeight: FontWeight.bold,
+                        height: 1.1,
                       ),
                     ),
+                    const SizedBox(height: 4),
                     const Text(
                       'Overall Attendance',
                       style: TextStyle(
@@ -447,25 +941,36 @@ class _DashboardScreenState extends State<DashboardScreen>
                         fontSize: 14,
                       ),
                     ),
+                    const SizedBox(height: 8),
+                    Text(
+                      DateFormat('EEEE, MMM dd').format(DateTime.now()),
+                      style: const TextStyle(
+                        color: Colors.white60,
+                        fontSize: 12,
+                      ),
+                    ),
                   ],
                 ),
               ),
               SizedBox(
-                width: 100,
-                height: 100,
+                width: 80,
+                height: 80,
                 child: CustomPaint(
-                  painter: CircularProgressPainter(progress: percentage / 100),
+                  painter: EnhancedCircularProgressPainter(progress: percentage / 100),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 20),
+
+          const SizedBox(height: 24),
+
+          // Stats row
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildStatItem('Present', '${_attendanceStats['presentClasses'] ?? 0}'),
-              _buildStatItem('Total', '${_attendanceStats['totalClasses'] ?? 0}'),
-              _buildStatItem('Absent', '${_attendanceStats['absentClasses'] ?? 0}'),
+              _buildStatColumn('Present', '${_attendanceStats['presentClasses'] ?? 0}', Icons.check_circle, Colors.green),
+              _buildStatColumn('Total', '${_attendanceStats['totalClasses'] ?? 0}', Icons.school, Colors.white),
+              _buildStatColumn('Absent', '${_attendanceStats['absentClasses'] ?? 0}', Icons.cancel, Colors.orange),
             ],
           ),
         ],
@@ -473,9 +978,18 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  Widget _buildStatItem(String label, String value) {
+  Widget _buildStatColumn(String label, String value, IconData icon, Color color) {
     return Column(
       children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.2),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, color: color, size: 20),
+        ),
+        const SizedBox(height: 8),
         Text(
           value,
           style: const TextStyle(
@@ -495,64 +1009,64 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  Widget _buildMarkAttendanceCard() {
+  Widget _buildQuickActions() {
     return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E2A3A),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: _hasMarkedToday
-              ? const Color(0xFF4CAF50)
-              : const Color(0xFF00F5FF),
-          width: 2,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.3),
-            blurRadius: 15,
-            offset: const Offset(0, 5),
-          ),
-        ],
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF334155), width: 0.5),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            _hasMarkedToday ? Icons.check_circle : Icons.qr_code_scanner,
-            size: 48,
-            color: _hasMarkedToday
-                ? const Color(0xFF4CAF50)
-                : const Color(0xFF00F5FF),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: _hasMarkedToday ? const Color(0xFF10B981).withValues(alpha: 0.1) : const Color(0xFF3B82F6).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  _hasMarkedToday ? Icons.check_circle : Icons.qr_code_scanner,
+                  color: _hasMarkedToday ? const Color(0xFF10B981) : const Color(0xFF3B82F6),
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _hasMarkedToday ? 'Attendance Marked Today!' : 'Mark Today\'s Attendance',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      _hasMarkedToday
+                          ? 'Great job! You\'re all set for today.'
+                          : 'Scan QR code to mark your presence',
+                      style: const TextStyle(
+                        color: Colors.white60,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 16),
-          Text(
-            _hasMarkedToday
-                ? 'Attendance Marked Today!'
-                : 'Mark Today\'s Attendance',
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-            ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            _hasMarkedToday
-                ? 'You have successfully marked your attendance for today'
-                : 'Verify your identity and scan the QR code to mark attendance',
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 14,
-            ),
-            textAlign: TextAlign.center,
-          ),
+
           if (!_hasMarkedToday) ...[
-            const SizedBox(height: 20),
+            const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,
-              child: ElevatedButton(
+              child: ElevatedButton.icon(
                 onPressed: () async {
                   final result = await Navigator.push(
                     context,
@@ -560,24 +1074,28 @@ class _DashboardScreenState extends State<DashboardScreen>
                       builder: (context) => const FaceVerificationScreen(),
                     ),
                   );
-                  // Auto-refresh when returning from QR scanner
-                  if (result == true || result == null) {
-                    print('🔄 Returned from face verification - refreshing dashboard');
+
+                  if (result is Map && result['success'] == true) {
+                    final attendance = result['attendance'] as Attendance;
+                    await addManualAttendance(attendance);
+                  } else {
                     await _loadData();
                   }
                 },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF00F5FF),
+                  backgroundColor: const Color(0xFF3B82F6),
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
+                  elevation: 0,
                 ),
-                child: const Text(
-                  'Start Verification',
+                icon: const Icon(Icons.qr_code_scanner, size: 20),
+                label: const Text(
+                  'Start Face Verification',
                   style: TextStyle(
-                    fontSize: 16,
+                    fontSize: 15,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -589,79 +1107,71 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  Widget _buildQuickStats() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildStatsGrid() {
+    return Row(
       children: [
-        const Text(
-          'Quick Stats',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
+        Expanded(
+          child: _buildStatCard(
+            'This Week',
+            '${_getWeeklyAttendance()}/7',
+            Icons.calendar_today,
+            const Color(0xFF10B981),
           ),
         ),
-        const SizedBox(height: 16),
-        Row(
-          children: [
-            Expanded(
-              child: _buildQuickStatCard(
-                'This Week',
-                '${_getWeeklyAttendance()}/7',
-                Icons.calendar_today,
-                const Color(0xFF4CAF50),
-              ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: GestureDetector(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const LecturesScreen()),
+              );
+            },
+            child: _buildStatCard(
+              'All Lectures',
+              'View Details',
+              Icons.school,
+              const Color(0xFF8B5CF6),
             ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: GestureDetector(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const LecturesScreen(),
-                    ),
-                  );
-                },
-                child: _buildQuickStatCard(
-                  'All Lectures',
-                  'View',
-                  Icons.school,
-                  const Color(0xFF2196F3),
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
       ],
     );
   }
 
-  Widget _buildQuickStatCard(String title, String value, IconData icon, Color color) {
+  Widget _buildStatCard(String title, String value, IconData icon, Color color) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E2A3A),
+        color: const Color(0xFF1E293B),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3), width: 1),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: color, size: 24),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: color, size: 20),
+          ),
           const SizedBox(height: 12),
           Text(
             value,
             style: const TextStyle(
               color: Colors.white,
-              fontSize: 24,
+              fontSize: 18,
               fontWeight: FontWeight.bold,
             ),
           ),
+          const SizedBox(height: 2),
           Text(
             title,
             style: const TextStyle(
-              color: Colors.white70,
+              color: Colors.white60,
               fontSize: 12,
             ),
           ),
@@ -670,62 +1180,98 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  Widget _buildRecentActivity() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text(
-              'Recent Activity',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
+  Widget _buildEnhancedRecentActivity() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF334155), width: 0.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.history, color: Color(0xFF3B82F6), size: 20),
+                  SizedBox(width: 8),
+                  Text(
+                    'Recent Activity',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
               ),
-            ),
-            TextButton.icon(
-              onPressed: _loadData,
-              icon: const Icon(Icons.refresh, color: Color(0xFF00F5FF), size: 16),
-              label: const Text(
-                'Refresh',
-                style: TextStyle(color: Color(0xFF00F5FF), fontSize: 12),
+              GestureDetector(
+                onTap: _loadData,
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF334155).withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: const Icon(
+                    Icons.refresh,
+                    color: Color(0xFF3B82F6),
+                    size: 16,
+                  ),
+                ),
               ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          if (_recentAttendance.isEmpty)
+            _buildEmptyState()
+          else
+            Column(
+              children: _recentAttendance
+                  .take(4)
+                  .map((record) => _buildEnhancedActivityItem(record))
+                  .toList(),
             ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        if (_recentAttendance.isEmpty)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(40),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1E2A3A),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: const Column(
-              children: [
-                Icon(Icons.history, size: 48, color: Colors.white30),
-                SizedBox(height: 16),
-                Text(
-                  'No attendance records yet',
-                  style: TextStyle(color: Colors.white54, fontSize: 16),
-                ),
-                Text(
-                  'Start marking your attendance to see history',
-                  style: TextStyle(color: Colors.white30, fontSize: 14),
-                ),
-              ],
-            ),
-          )
-        else
-          ...(_recentAttendance.take(5).map((record) => _buildActivityItem(record))),
-      ],
+        ],
+      ),
     );
   }
 
-  Widget _buildActivityItem(Attendance attendance) {
+  Widget _buildEmptyState() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFF334155).withValues(alpha: 0.3),
+              borderRadius: BorderRadius.circular(50),
+            ),
+            child: const Icon(Icons.history, size: 40, color: Colors.white30),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'No attendance records yet',
+            style: TextStyle(color: Colors.white54, fontSize: 14),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Start marking attendance to see your history',
+            style: TextStyle(color: Colors.white30, fontSize: 12),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEnhancedActivityItem(Attendance attendance) {
     final isToday = DateFormat('yyyy-MM-dd').format(attendance.markedAt) ==
         DateFormat('yyyy-MM-dd').format(DateTime.now());
 
@@ -733,73 +1279,130 @@ class _DashboardScreenState extends State<DashboardScreen>
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E2A3A),
+        color: const Color(0xFF0F172A),
         borderRadius: BorderRadius.circular(12),
-        border: isToday ? Border.all(color: const Color(0xFF00F5FF)) : null,
+        border: isToday ? Border.all(color: const Color(0xFF3B82F6), width: 1) : null,
       ),
       child: Row(
         children: [
+          // Status indicator
           Container(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
-              color: const Color(0xFF4CAF50).withValues(alpha: 0.2),
+              color: const Color(0xFF10B981).withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Icon(
-              Icons.check,
-              color: Color(0xFF4CAF50),
+              Icons.check_circle,
+              color: Color(0xFF10B981),
               size: 16,
             ),
           ),
-          const SizedBox(width: 16),
+
+          const SizedBox(width: 12),
+
+          // Lecture info
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  attendance.lectureName,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        attendance.lectureName,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (isToday)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF3B82F6).withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text(
+                          'TODAY',
+                          style: TextStyle(
+                            color: Color(0xFF3B82F6),
+                            fontSize: 8,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
-                Text(
-                  'Marked at ${DateFormat('hh:mm a').format(attendance.markedAt)}',
-                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+
+                const SizedBox(height: 4),
+
+                Row(
+                  children: [
+                    Icon(Icons.person, size: 12, color: Colors.white60),
+                    const SizedBox(width: 4),
+                    Text(
+                      attendance.teacherName,
+                      style: const TextStyle(color: Colors.white60, fontSize: 11),
+                    ),
+                  ],
                 ),
-                Text(
-                  'By ${attendance.teacherName}',
-                  style: const TextStyle(color: Colors.white54, fontSize: 11),
+
+                const SizedBox(height: 2),
+
+                Row(
+                  children: [
+                    Icon(Icons.access_time, size: 12, color: Colors.white60),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${DateFormat('MMM dd').format(attendance.markedAt)} • ${DateFormat('hh:mm a').format(attendance.markedAt)}',
+                      style: const TextStyle(color: Colors.white60, fontSize: 11),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 2),
+
+                Row(
+                  children: [
+                    Icon(Icons.class_, size: 12, color: Colors.white60),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${attendance.lectureClass}-${attendance.section}',
+                      style: const TextStyle(color: Colors.white60, fontSize: 11),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
+
+          // Status badge
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: const Color(0xFF4CAF50).withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(12),
+              color: const Color(0xFF10B981).withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(
+                color: const Color(0xFF10B981).withValues(alpha: 0.3),
+              ),
             ),
-            child: Text(
-              attendance.status.toUpperCase(),
-              style: const TextStyle(
-                color: Color(0xFF4CAF50),
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
+            child: const Text(
+              'PRESENT',
+              style: TextStyle(
+                color: Color(0xFF10B981),
+                fontSize: 9,
+                fontWeight: FontWeight.bold,
               ),
             ),
           ),
         ],
       ),
     );
-  }
-
-  String _getGreeting() {
-    final hour = DateTime.now().hour;
-    if (hour < 12) return 'Good Morning!';
-    if (hour < 17) return 'Good Afternoon!';
-    return 'Good Evening!';
   }
 
   int _getWeeklyAttendance() {
@@ -811,40 +1414,39 @@ class _DashboardScreenState extends State<DashboardScreen>
     }).length;
   }
 
-  int _getMonthlyAttendance() {
-    final now = DateTime.now();
-    final startOfMonth = DateTime(now.year, now.month, 1);
-    return _recentAttendance.where((record) {
-      return record.markedAt.isAfter(startOfMonth.subtract(const Duration(days: 1))) &&
-          record.markedAt.isBefore(now.add(const Duration(days: 1)));
-    }).length;
+  String _getGreeting() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) return 'Good Morning 🌅';
+    if (hour < 17) return 'Good Afternoon ☀️';
+    return 'Good Evening 🌆';
   }
 }
 
-// Custom painter for circular progress
-class CircularProgressPainter extends CustomPainter {
+// Enhanced circular progress painter
+class EnhancedCircularProgressPainter extends CustomPainter {
   final double progress;
 
-  CircularProgressPainter({required this.progress});
+  EnhancedCircularProgressPainter({required this.progress});
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
-    final radius = size.width / 2 - 10;
+    final radius = size.width / 2 - 6;
 
     // Background circle
     final backgroundPaint = Paint()
       ..color = Colors.white.withValues(alpha: 0.2)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 8;
+      ..strokeWidth = 6
+      ..strokeCap = StrokeCap.round;
 
     canvas.drawCircle(center, radius, backgroundPaint);
 
-    // Progress arc
+    // Progress arc with gradient effect
     final progressPaint = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 8
+      ..strokeWidth = 6
       ..strokeCap = StrokeCap.round;
 
     canvas.drawArc(
@@ -853,6 +1455,21 @@ class CircularProgressPainter extends CustomPainter {
       2 * 3.14159 * progress, // Progress angle
       false,
       progressPaint,
+    );
+
+    // Add a glow effect
+    final glowPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.3)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 10
+      ..strokeCap = StrokeCap.round;
+
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      -1.5708,
+      2 * 3.14159 * progress,
+      false,
+      glowPaint,
     );
   }
 
