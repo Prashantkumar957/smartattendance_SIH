@@ -1,108 +1,69 @@
-📱 Smart Attendance App
+# 📱 Smart Attendance App
 
-Smart Attendance App is a comprehensive cross-platform mobile application built with Flutter that revolutionizes traditional attendance management in educational institutions.
+Smart Attendance App is a comprehensive cross-platform mobile application built with **Flutter** that revolutionizes traditional attendance management in educational institutions.  
 
-The app integrates face verification and QR code scanning to deliver a secure, automated attendance system that eliminates manual roll calls and paper-based tracking.
+The app integrates **face verification** and **QR code scanning** to deliver a secure, automated attendance system that eliminates manual roll calls and paper-based tracking.  
 
-🚀 Features
+<img width="736" height="560" alt="image" src="https://github.com/user-attachments/assets/b8da4490-dd86-4136-ae4f-181611da0a32" />
 
-🔐 Secure Attendance Marking
+<img width="1418" height="622" alt="image" src="https://github.com/user-attachments/assets/08a8d273-0ce3-4cf0-8335-5d8ae393b79e" />
 
-Scan teacher-generated QR codes.
 
-Validate presence with biometric face verification.
 
-📊 Real-Time Dashboard
+## 🚀 Features
 
-Present/absent counts.
+### 🔐 Secure Attendance Marking
+- Scan teacher-generated QR codes.  
+- Validate presence with biometric face verification.  
 
-Automatic attendance percentage calculation.
+### 📊 Real-Time Dashboard
+- Present/absent counts.  
+- Automatic attendance percentage calculation.  
+- Weekly summaries & chronological activity history.  
+- Beautiful **dark-themed UI** with smooth animations.  
 
-Weekly summaries & chronological activity history.
+### 🔄 Offline-to-Online Sync
+- Stores attendance locally with **SharedPreferences**.  
+- Automatically syncs with **cloud database** when online.  
 
-Beautiful dark-themed UI with smooth animations.
+### 🎉 Instant Feedback
+- Animated success screens.  
+- Dashboard increments values (+1 for each attendance).  
 
-🔄 Offline-to-Online Sync
+### 🧑‍🎓 Student Profile Management
+- Name, Class, Section, Roll No. displayed in clean UI cards.  
 
-Stores attendance locally with SharedPreferences.
+---
 
-Automatically syncs with cloud database when online.
+## 🏗️ Architecture
+- **Hybrid storage** → Cloud APIs + Local SharedPreferences.  
+- **Flutter StatefulWidget with TickerProviderStateMixin** → Smooth animations.  
+- **RESTful APIs** → Backend communication.  
+- **Material Design 3** → Modern UI/UX.  
 
-🎉 Instant Feedback
+<img width="1418" height="622" alt="image" src="https://github.com/user-attachments/assets/193fb898-0f68-49d4-9e26-f1dfc34338a9" />
 
-Animated success screens.
 
-Dashboard increments values (+1 for each attendance).
+## 🛠️ Tech Stack
+- **Frontend:** Flutter (Dart)  
+- **Backend:** RESTful APIs (JSON-based)  
+- **Storage:** SharedPreferences (offline), Cloud database (online)  
+- **Authentication:** Face Recognition, QR Code Scanning  
+- **UI/UX:** Material Design 3, Dark Theme, Animated Widgets  
 
-🧑‍🎓 Student Profile Management
+---
 
-Name, Class, Section, Roll No. displayed in clean UI cards.
+## 📸 Screenshots (Examples)
+- QR Scan  
+- Face Verification  
+- Dashboard  
+- Activity Feed  
 
-🏗️ Architecture
+---
 
-Hybrid storage → Cloud APIs + Local SharedPreferences.
-
-Flutter StatefulWidget with TickerProviderStateMixin → Smooth animations.
-
-RESTful APIs → Backend communication.
-
-Material Design 3 → Modern UI/UX.
-
-🛠️ Tech Stack
-
-Frontend: Flutter (Dart)
-
-Backend: RESTful APIs (JSON-based)
-
-Storage: SharedPreferences (offline), Cloud database (online)
-
-Authentication: Face Recognition, QR Code Scanning
-
-UI/UX: Material Design 3, Dark Theme, Animated Widgets
-
-📸 Screenshots (Examples)
-QR Scan	Face Verification	Dashboard	Activity Feed
-
-	
-	
-	
-📦 Installation
+## 📦 Installation
 
 Clone the repository:
-
+```bash
 git clone https://github.com/your-username/smart-attendance-app.git
 cd smart-attendance-app
-
-
-Get dependencies:
-
-flutter pub get
-
-
-Run the app:
-
-flutter run
-
-🎯 Why This Project?
-
-✅ Eliminates proxy/false attendance.
-
-✅ Saves administrative time.
-
-✅ Provides real-time insights.
-
-✅ Scalable for multiple institutions.
-
-📌 Future Enhancements
-
-📅 Teacher-side dashboard.
-
-📍 GPS-based location verification.
-
-🔔 Smart notifications for low attendance.
-
-🧑‍🏫 Admin analytics portal.
-
-📝 License
-
-This project is licensed under the MIT License – free to use and modify.
