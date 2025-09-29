@@ -21,6 +21,9 @@ The app integrates **face verification** and **QR code scanning** to deliver a s
 - Automatic attendance percentage calculation.  
 - Weekly summaries & chronological activity history.  
 - Beautiful **dark-themed UI** with smooth animations.  
+![WhatsApp Image 2025-09-28 at 13 27 29_c78828a7](https://github.com/user-attachments/assets/2f1a72c6-832c-4c12-92ab-cdd627ca9f67)![WhatsApp Image 2025-09-28 at 13 27 30_3744def6](https://github.com/user-attachments/assets/d2ec6be8-95a1-43c7-b6dd-ea7e44048125)
+![WhatsApp Image 2025-09-28 at 13 39 45_a42873f8](https://github.com/user-attachments/assets/a01f1ffe-8d13-437a-bea1-88010e76d469)
+
 
 ### 🔄 Offline-to-Online Sync
 - Stores attendance locally with **SharedPreferences**.  
