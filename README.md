@@ -2,9 +2,10 @@
 
 Smart Attendance App is a comprehensive cross-platform mobile application built with **Flutter** that revolutionizes traditional attendance management in educational institutions.  
 
-The app integrates **face verification** and **QR code scanning** to deliver a secure, automated attendance system that eliminates manual roll calls and paper-based tracking.  
+The app integrates **face verification** and **QR code scanning** to deliver a secure, automated attendance system that eliminates manual roll calls and paper-based tracking. 
 
-<img width="736" height="560" alt="image" src="https://github.com/user-attachments/assets/b8da4490-dd86-4136-ae4f-181611da0a32" />
+OUR APPLICATION SCREENSHOT:=  
+<img width="888" height="645" alt="image" src="https://github.com/user-attachments/assets/9aaa17f2-8d0c-4b0d-a07e-c27c6273bc4f" />
 
 <img width="1418" height="622" alt="image" src="https://github.com/user-attachments/assets/08a8d273-0ce3-4cf0-8335-5d8ae393b79e" />
 
@@ -21,8 +22,6 @@ The app integrates **face verification** and **QR code scanning** to deliver a s
 - Automatic attendance percentage calculation.  
 - Weekly summaries & chronological activity history.  
 - Beautiful **dark-themed UI** with smooth animations.  
-![WhatsApp Image 2025-09-28 at 13 27 29_c78828a7](https://github.com/user-attachments/assets/2f1a72c6-832c-4c12-92ab-cdd627ca9f67)![WhatsApp Image 2025-09-28 at 13 27 30_3744def6](https://github.com/user-attachments/assets/d2ec6be8-95a1-43c7-b6dd-ea7e44048125)
-![WhatsApp Image 2025-09-28 at 13 39 45_a42873f8](https://github.com/user-attachments/assets/a01f1ffe-8d13-437a-bea1-88010e76d469)
 
 
 ### 🔄 Offline-to-Online Sync
